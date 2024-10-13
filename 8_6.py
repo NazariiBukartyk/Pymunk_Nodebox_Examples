@@ -67,48 +67,53 @@ def strategy(b=s3.body):
         else:
             b.angle=getAngle(x,y,*s1.body.position) #2*math.pi*random.random()
 
+def dynamicState(b=s3.body):
+    x, y = b.position
+    dist_to_s1 = getDist(x, y, s1.body.position[0], s1.body.position[1])
+    dist_to_s2 = getDist(x, y, S2[0].body.position[0], S2[0].body.position[1])
+    angle_to_s1 = getAngle(x, y, s1.body.position[0], s1.body.position[1])
+    angle_to_s2 = getAngle(x, y, S2[0].body.position[0], S2[0].body.position[1])
+    return (dist_to_s1, dist_to_s2, angle_to_s1, angle_to_s2, b.angle)
+
 def strategy2(b=s3.body):
-    u"""Стратегія робота, який сканує сектор ультразвуковим сенсором, з реалізацією найпростішого машинного навчаннм з підкріпленням (Q-learning). Кожні 10 кадрів визначається чи обєкти s1 або s2 знаходяться в межах сектора. Якщо це s1 то стан=об'єкт. Якщо це s2 то стан= антиоб'єкт. Якщо нічого, то стан=нічого.  Установлюється стан і винагорода. В Q-таблиці (див.) оновлюється сума винагород, яка відповдає стану і дії. Дія 0 - залишати напрямок, 1 - змінювати (випадковий кут). Далі алгоритм вибирає дію. З заданими імовірностями дія може бути випадковою або відповідати дії з максимальною сумою винагород для цього стану (оптимальною). Далі дія виконується. Вкінці алгоритм запобігає виїзду робота за межі кола."""
-    v=100
-    a=b.angle
-    b.velocity=v*cos(a), v*sin(a)
-    x,y=b.position
-    R=getDist(x,y,350,250)
+    v = 100
+    a = b.angle
+    b.velocity = v * cos(a), v * sin(a)
+    x, y = b.position
+    R = getDist(x, y, 350, 250)
+    
     ellipse(x, y, 200, 200, stroke=Color(0.5))
-    #line(x,y,x+100*cos(a),y+100*sin(a),stroke=Color(0.5))
-    line(x,y,x+100*cos(a+0.5),y+100*sin(a+0.5),stroke=Color(0.5))
-    line(x,y,x+100*cos(a-0.5),y+100*sin(a-0.5),stroke=Color(0.5))
 
-    if canvas.frame%10==0: # кожні n кадірів
-        inS=inSector(s1.body.position[0], s1.body.position[1], x, y, 100, a)
-        inS2=inSector(S2[0].body.position[0], S2[0].body.position[1], x, y, 100, a)
+    if canvas.frame % 10 == 0:  # кожні n кадрів
+        inS = inSector(s1.body.position[0], s1.body.position[1], x, y, 100, a)
+        inS2 = inSector(S2[0].body.position[0], S2[0].body.position[1], x, y, 100, a)
 
-        # установлюємо стан і винагороду
+        # Оновлення стану
+        state = dynamicState(b)
+        reward = 0
+
         if inS:
-            state=1
-            reward=1 if b.action==0 else -1
+            reward = 1 if b.action == 0 else -1
         elif inS2:
-            state=2
-            reward=-1 if b.action==0 else 1
+            reward = -1 if b.action == 0 else 1
+
+        alpha = 0.1  # Можна адаптувати в залежності від ситуації
+        b.Q[state][b.action] += alpha * (reward + np.max(b.Q[state]) - b.Q[state][b.action])  # TD-метод
+        print(state, b.action, b.Q)
+
+        # Вибір дії
+        epsilon = 0.1  # ймовірність випадкової дії
+        if random.random() < epsilon:
+            b.action = random.choice([0, 1])  # Випадкова дія
         else:
-            state=0; reward=0
-        b.Q[state][b.action] +=reward # оновлюємо Q таблицю
-        print state, b.action, b.Q
+            b.action = np.argmax(b.Q[state])  # Найкраща дія
 
-        # вибираємо дію
-        #if random.choice([1, 0, 0]): # деколи випадково
-        #if random.random()<0.1:
-        act=b.Q[state][b.action]
-        if random.random()<abs(1.0/(act+0.1)): # 0.1 запобігає /0
-            b.action=random.choice([0, 1]) # випадково 50/50
-        else:
-            b.action=np.argmax(b.Q[state]) # залишати чи змінювати?
+        if b.action:  # Якщо змінювати
+            b.angle += random.uniform(-math.pi/4, math.pi/4)  # Поворот на випадковий кут
 
-        if b.action: # якщо змінювати
-            b.angle=2*math.pi*random.random()
-
-        if R>180: # запобігти виїзду за межі
-            b.angle=getAngle(x,y,350,250)
+        if R > 180:  # Запобігання виїзду за межі
+            b.angle = getAngle(x, y, 350, 250)
+            
 
 def scr(s,s0,s3,p=1):
     bx,by=s.body.position
@@ -120,6 +125,7 @@ def scr(s,s0,s3,p=1):
         else:
             s3.score=s3.score+p
         s.body.position=random.randint(200,400),random.randint(200,300)
+
 
 def score():
     u"""визначає переможця"""
